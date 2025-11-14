@@ -1,2 +1,2 @@
-import "./styles/defaultTheme.css";
-export * from ".";
+export * from "./Button/Button";
+export * from "./TextInput/TextInput";

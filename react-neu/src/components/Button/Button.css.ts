@@ -5,7 +5,7 @@ export const baseButton = style({
   background: neuVars.color.background,
   color: neuVars.color.text,
   border: "none",
-  borderRadius: "12px",
+  borderRadius: "0px",
   padding: "14px 28px",
   cursor: "pointer",
   transition: "all 0.2s ease",
