@@ -1,72 +1,71 @@
-import React from "react";
-import * as styles from "./TextInput.css";
+import React, { useState } from "react";
+import { baseInput } from "./TextInput.css";
 import { getNeumorphicStyle } from "../../styles/neumorphicEngine";
-import { filterDOMProps } from "../../styles/filterDomProps";
+import type { NeumorphicProps } from "../../styles/types";
 
-export const NeuTextInput: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = ({
-  variant = "pressed",
-  color = "#cccccc",
-  distance = 5,
-  blur = 10,
-  intensity = 6,
+// FIX: Use InputHTMLAttributes instead of generic HTMLAttributes
+// This ensures 'placeholder', 'value', 'type', etc. are valid.
+type TextInputProps = NeumorphicProps & React.InputHTMLAttributes<HTMLInputElement>;
+
+export const NeuTextInput: React.FC<TextInputProps> = ({
+  // Default to 'inset' as that is standard for inputs
+  variant = "inset",
+  color,
   elevation = 2,
+  intensity,
+  shape = "rounded",
+  angleDeg,
   border = false,
-  radius = "15px",
-  padding = "1em",
-  fontSize = "1rem",
-  textColor = "#333",
-  transition = "all 0.3s ease-in-out",
+  ridge = false,
+
+  // Standard Props
+  className,
   style,
   disabled,
-  ...props
+  onFocus,
+  onBlur,
+  ...htmlProps
 }) => {
-  const domProps = filterDOMProps(props);
-  const [focused, setFocused] = React.useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
-  // Base neumorphic shadow (pressed = inset)
-  const { background, boxShadow } = getNeumorphicStyle({
-    variant: "pressed",
+  // Map Focus -> Active
+  const neuStyles = getNeumorphicStyle({
+    variant,
     color,
-    distance,
-    blur,
-    intensity,
     elevation,
+    intensity,
+    shape,
+    angleDeg,
     border,
-    state: focused ? "active" : "default",
+    ridge,
+    state: isFocused ? "active" : "default",
   });
-
-  const mergedStyle: React.CSSProperties = {
-    WebkitAppearance: "none",
-    MozAppearance: "none",
-    appearance: "none",
-    background: background || color,
-    border: "none",
-    outline: "none",
-    borderRadius: radius,
-    padding,
-    color: textColor,
-    fontSize,
-    width: "100%",
-    boxSizing: "border-box",
-    transition,
-    boxShadow: focused
-      ? "13px 13px 100px #969696, -13px -13px 100px #ffffff" // your custom glow
-      : boxShadow || "inset 2px 5px 10px rgba(0,0,0,0.3)",
-    transform: focused ? "scale(1.05)" : "scale(1)",
-    backgroundColor: focused ? "white" : color,
-    cursor: disabled ? "not-allowed" : "text",
-    ...style,
-  };
 
   return (
     <input
-      className={styles.baseInput}
-      style={mergedStyle}
+      className={`${baseInput} ${className || ""}`}
       disabled={disabled}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      {...domProps}
+
+      // Events
+      onFocus={(e) => {
+        setIsFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setIsFocused(false);
+        onBlur?.(e);
+      }}
+
+      // Styling
+      style={{
+        ...neuStyles,
+        ...style,
+        // Ensure background adapts if user overrides color
+        background: style?.background || neuStyles.background,
+        color: style?.color || "inherit",
+      }}
+
+      {...htmlProps}
     />
   );
 };
-

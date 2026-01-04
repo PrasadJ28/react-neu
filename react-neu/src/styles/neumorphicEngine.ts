@@ -1,110 +1,159 @@
 // src/styles/neumorphicEngine.ts
 import { lighten, darken } from "./colorUtils";
+import type { NeumorphicProps } from "./types";
 
-export type NeumorphicVariant = "flat" | "convex" | "concave" | "pressed";
-export type NeumorphicState = "default" | "hover" | "active" | "disabled" | "focus";
-
-export interface NeumorphicOptions {
-  variant?: NeumorphicVariant;
-  color?: string;
-  angleDeg?: number;
-  distance?: number;   // 1–10 (or px if you want)
-  blur?: number;       // 1–10
-  intensity?: number;  // 1–10
-  elevation?: number;  // 1–10
-  border?: boolean;
-  state?: NeumorphicState;
-
-  // New: control composite behavior without hardcoding in components
-  focusGlow?: boolean;     // add an outer glow on focus
-  glowScale?: number;      // multiplier for distance/blur on glow
+interface EngineOptions extends NeumorphicProps {
+  state?: "default" | "hover" | "active";
 }
 
-function pairShadows({
-  color, intensity, distance, blur, angleDeg, inset = false,
-}: {
-  color: string;
-  intensity: number;
-  distance: number;
-  blur: number;
-  angleDeg: number;
-  inset?: boolean;
-}) {
-  const darkShadow = darken(color, intensity * 2);
-  const lightShadow = lighten(color, intensity * 2);
-  const ang = (angleDeg * Math.PI) / 180;
-  const ox = Math.cos(ang) * distance;
-  const oy = Math.sin(ang) * distance;
-  const pre = inset ? "inset " : "";
-  return `${pre}${ox}px ${oy}px ${blur}px ${darkShadow}, ${pre}${-ox}px ${-oy}px ${blur}px ${lightShadow}`;
+export function getNeumorphicStyle(options: EngineOptions) {
+  const {
+    variant = "flat",
+    surface = "flat", // New Prop: 'flat', 'convex', 'concave'
+    color = "#e0e0e0",
+    intensity = 0.15,
+    elevation = 2,
+    angleDeg = 145,
+    border = false,
+    shape = "rounded",
+    ridge = false,
+    state = "default",
+  } = options;
+
+  // --- 1. Utilities ---
+  const shiftAmount = Math.max(5, Math.min(100, intensity * 200));
+  const lightColor = lighten(color, shiftAmount);
+  const darkColor = darken(color, shiftAmount);
+  const outlineColor = darken(color, 20);
+  const definitionBorder = border ? darken(color, 10) : "transparent";
+
+  // --- 2. Shadow Generators ---
+
+  // A. Standard Drop Shadow (Elevates the element)
+  const getDropShadow = (dist: number) => {
+    const blur = dist * 2;
+    const rad = (angleDeg * Math.PI) / 180;
+    const dx = Math.cos(rad) * dist;
+    const dy = Math.sin(rad) * dist;
+    return `${dx.toFixed(1)}px ${dy.toFixed(1)}px ${blur}px ${darkColor},
+            ${-dx.toFixed(1)}px ${-dy.toFixed(1)}px ${blur}px ${lightColor}`;
+  };
+
+  // B. Standard Inset Shadow (Creates a hole) - RESTORED
+  const getInsetShadow = (dist: number, tight = false) => {
+    const blur = tight ? dist : dist * 2;
+    const rad = (angleDeg * Math.PI) / 180;
+    const dx = Math.cos(rad) * dist;
+    const dy = Math.sin(rad) * dist;
+    return `inset ${dx.toFixed(1)}px ${dy.toFixed(1)}px ${blur}px ${darkColor},
+            inset ${-dx.toFixed(1)}px ${-dy.toFixed(1)}px ${blur}px ${lightColor}`;
+  };
+
+  // C. Surface Curve (The "Layer" you requested)
+  // This adds a subtle inner shadow to simulate curvature WITHOUT removing the element's main shadow.
+  const getSurfaceCurve = (type: "convex" | "concave", dist: number) => {
+    // We use a softer blur for the surface curve so it looks like a smooth deformation
+    const blur = dist * 1.5;
+    const spread = 0; // Keep it contained
+    const rad = (angleDeg * Math.PI) / 180;
+    const dx = Math.cos(rad) * dist;
+    const dy = Math.sin(rad) * dist;
+
+    if (type === "convex") {
+      // Bulge Out: Light Top-Left, Dark Bottom-Right (Inside)
+      return `inset ${dx.toFixed(1)}px ${dy.toFixed(1)}px ${blur}px ${spread}px ${lightColor},
+              inset ${-dx.toFixed(1)}px ${-dy.toFixed(1)}px ${blur}px ${spread}px ${darkColor}`;
+    } else {
+      // Dish In: Dark Top-Left, Light Bottom-Right (Inside)
+      return `inset ${dx.toFixed(1)}px ${dy.toFixed(1)}px ${blur}px ${spread}px ${darkColor},
+              inset ${-dx.toFixed(1)}px ${-dy.toFixed(1)}px ${blur}px ${spread}px ${lightColor}`;
+    }
+  };
+
+  // --- 3. The State Machine ---
+
+  let finalShadow = "none";
+  let transform = "translateY(0px)";
+  let finalBorder = `1px solid ${definitionBorder}`;
+
+  // Logic: Base Shadow (Variant) + Surface Shadow (Curve)
+
+  switch (variant) {
+    case "flat":
+      if (state === "active") {
+        finalShadow = getInsetShadow(elevation);
+        finalBorder = `1px solid transparent`;
+      } else {
+        finalShadow = "none";
+        finalBorder = `1px solid ${outlineColor}`;
+      }
+      break;
+
+    case "pop":
+      // 1. Base: Always Elevated (Drop Shadow)
+      const drop = getDropShadow(elevation * 2);
+
+      // 2. Layer: Add Surface Curve if requested
+      // If 'ridge' is active, we use standard inset.
+      // If 'surface' is convex/concave, we overlay the curve.
+
+      if (state === "active") {
+        if (ridge) {
+           // Ridge: Sharp inset + Drop
+           finalShadow = `${drop}, ${getInsetShadow(elevation)}`;
+           transform = "scale(0.99)";
+        } else {
+           // Standard Pop Active:
+           // If user wants "Rubbery" (Concave active), we layer it.
+           // Otherwise we just sink slightly (scale).
+           const activeSurface = surface === "convex" ? "concave" : surface;
+
+           if (activeSurface === "concave") {
+             // RUBBER EFFECT: Elevated Body + Concave Top
+             finalShadow = `${drop}, ${getSurfaceCurve("concave", elevation)}`;
+             transform = "scale(0.98)";
+           } else {
+             // Standard Mechanical Press (Just sinks physically)
+             finalShadow = getInsetShadow(elevation);
+             transform = "translateY(1px)";
+           }
+        }
+      } else {
+        // Default State
+        if (surface !== "flat") {
+           // Apply static curvature (e.g. a permanent Convex button)
+           finalShadow = `${drop}, ${getSurfaceCurve(surface as "convex"|"concave", elevation)}`;
+        } else {
+           finalShadow = drop;
+        }
+      }
+      break;
+
+    case "sink":
+    case "inset":
+      if (state === "active") {
+        finalShadow = getInsetShadow(Math.max(1, elevation * 0.5), true);
+      } else {
+        finalShadow = getInsetShadow(elevation);
+      }
+      break;
+  }
+
+  // --- 4. Shape Handling ---
+  const radiusMap: Record<string, string> = {
+    square: "4px",
+    rounded: "12px",
+    circle: "50%",
+    pill: "9999px",
+  };
+
+  return {
+    background: color,
+    boxShadow: finalShadow,
+    borderRadius: radiusMap[shape] || "12px",
+    border: finalBorder,
+    transform,
+    outline: "none",
+    transition: "box-shadow 0.2s ease-in-out, transform 0.1s ease-out",
+  };
 }
-
-export function getNeumorphicStyle({
-  variant = "convex",
-  color = "#f6f5f4",
-  angleDeg = 135,
-  distance = 6,
-  blur = 12,
-  intensity = 6,
-  elevation = 2,
-  border = false,
-  state = "default",
-  focusGlow = false,
-  glowScale = 3,
-}: NeumorphicOptions) {
-  // Elevation scaling (kept mild so component props remain the main control)
-  const level = Math.max(1, Math.min(10, elevation));
-  const effDistance = distance * level ** 1.2;
-  const effBlur = blur * level ** 1.2;
-
-  // Base background by variant
-  let background = color;
-  if (variant === "convex") {
-    background = `linear-gradient(225deg, ${lighten(color, 4)}, ${darken(color, 4)})`;
-  } else if (variant === "concave") {
-    background = `linear-gradient(225deg, ${darken(color, 4)}, ${lighten(color, 4)})`;
-  } else if (variant === "pressed") {
-    background = lighten(color, 3);
-  }
-
-  // Base shadows by variant
-  let base = "";
-  if (variant === "flat") {
-    base = pairShadows({ color, intensity, distance: effDistance, blur: effBlur, angleDeg });
-  } else if (variant === "convex") {
-    base = pairShadows({ color, intensity, distance: effDistance, blur: effBlur, angleDeg });
-  } else if (variant === "concave") {
-    base = pairShadows({ color, intensity, distance: effDistance, blur: effBlur, angleDeg, inset: true });
-  } else if (variant === "pressed") {
-    // deeper inset for pressed
-    base = pairShadows({
-      color,
-      intensity: intensity + 2,
-      distance: effDistance * 1.6,
-      blur: effBlur * 1.8,
-      angleDeg,
-      inset: true,
-    });
-  }
-
-  // Optional focus glow layer (outer) – engine-driven, not hardcoded
-  let composite = base;
-  if (state === "focus" && focusGlow) {
-    const glow = pairShadows({
-      color,
-      intensity: Math.max(1, intensity - 1),
-      distance: effDistance * glowScale,
-      blur: effBlur * glowScale,
-      angleDeg,
-      inset: false,
-    });
-    // outer glow first, then base inset so it feels “halo + pressed”
-    composite = `${glow}, ${base}`;
-    // Slight brighten on focus to mimic your white-on-focus without hardcoding white
-    background = lighten(color, 6);
-  }
-
-  const borderStyle = border ? `2px solid ${darken(color, 10)}` : "none";
-  return { background, boxShadow: composite, border: borderStyle };
-}
-

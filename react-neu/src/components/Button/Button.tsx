@@ -1,90 +1,83 @@
-import React from "react";
-import * as styles from "./Button.css";
-import { filterDOMProps } from "../../styles/filterDomProps";
-import { getNeumorphicStyle } from "../../styles/neumorphicEngine"; 
+import React, { useState } from "react";
+import { baseButton } from "./Button.css";
+import { getNeumorphicStyle } from "../../styles/neumorphicEngine";
+import type { NeuComponentProps } from "../../styles/types";
 
-export const NeuButton: React.FC<NeuButtonProps> = ({
-  // internal props
+export const NeuButton: React.FC<NeuComponentProps<HTMLButtonElement>> = ({
+  // Neumorphic Props (with defaults)
   variant = "flat",
-  color = "#e0e0e0",
-  angleDeg = 135,
-  distance = 4,
-  blur = 6,
-  intensity = 5,
+  surface = "flat",
+  color,       // If undefined, Engine uses theme default
   elevation = 2,
-  border = false,
-  radius = "0px",
-  padding = "14px 28px",
-  textColor = "#333",
-  fontSize = "1rem",
-  fontFamily = "inherit",
-  fontWeight = 500,
-  transition,
-  hoverStyle,
-  activeStyle,
-  disabledStyle,
-  style,
-  disabled,
-  onClick,
+  intensity,
+  shape = "rounded",
+  angleDeg,
+  border,
+  ridge = false,
+
+  // Standard React Props
   children,
-  ...props
+  style,
+  className,
+  disabled,
+  ...htmlProps // Spread standard HTML attributes (onClick, id, type, etc.)
 }) => {
-  const defaultProps = filterDOMProps(props);
+  // 1. Interaction State
+  // We track if the user is pressing the button
+  const [isPressed, setIsPressed] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
-  const [state, setState] = React.useState<"default" | "hover" | "active" | "disabled">(
-    disabled ? "disabled" : "default"
-  );
+  // 2. Determine State for Engine
+  // Priority: Active (Pressed) > Hover > Default
+  let visualState: "default" | "hover" | "active" = "default";
 
-  const visualVariant =
-    state === "active"
-      ? "pressed"
-      : state === "hover"
-      ? variant === "concave"
-        ? "pressed"
-        : "convex"
-      : variant;
+  if (isPressed) {
+    visualState = "active";
+  } else if (isHovered) {
+    visualState = "hover";
+  }
 
-  const { background, boxShadow, border: borderStyle } = getNeumorphicStyle({
-    variant: visualVariant,
+  // 3. Generate Styles from Engine
+  const neuStyles = getNeumorphicStyle({
+    variant,
+    surface,
     color,
-    angleDeg,
-    distance,
-    blur,
-    intensity,
     elevation,
+    intensity,
+    shape,
+    angleDeg,
     border,
-    state,
+    ridge,
+    state: visualState,
   });
-
-  const mergedStyle: React.CSSProperties = {
-    background,
-    boxShadow,
-    border: borderStyle,
-    borderRadius: radius,
-    padding,
-    color: textColor,
-    fontSize,
-    fontFamily,
-    fontWeight,
-    cursor: disabled ? "not-allowed" : "pointer",
-    transition: transition || "all 0.25s ease",
-    ...(state === "hover" && hoverStyle),
-    ...(state === "active" && activeStyle),
-    ...(state === "disabled" && disabledStyle),
-    ...style,
-  };
 
   return (
     <button
-      className={styles.baseButton}
-      style={mergedStyle}
+      className={`${baseButton} ${className || ""}`}
       disabled={disabled}
-      onClick={onClick}
-      onMouseEnter={() => !disabled && setState("hover")}
-      onMouseLeave={() => !disabled && setState("default")}
-      onMouseDown={() => !disabled && setState("active")}
-      onMouseUp={() => !disabled && setState("hover")}
-      {...defaultProps}
+
+      // Mouse & Touch Events
+      onMouseDown={() => !disabled && setIsPressed(true)}
+      onMouseUp={() => setIsPressed(false)}
+      onMouseLeave={() => {
+        setIsPressed(false);
+        setIsHovered(false);
+      }}
+      onMouseEnter={() => !disabled && setIsHovered(true)}
+
+      // Touch support for mobile feeling
+      onTouchStart={() => !disabled && setIsPressed(true)}
+      onTouchEnd={() => setIsPressed(false)}
+
+      // Apply Generated Styles
+      style={{
+        ...neuStyles, // The Engine's output (Shadows, Background, Radius)
+        ...style,     // User overrides (if any)
+        opacity: disabled ? 0.6 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+
+      {...htmlProps}
     >
       {children}
     </button>
